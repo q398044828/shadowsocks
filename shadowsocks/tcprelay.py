@@ -30,12 +30,9 @@ import platform
 import threading
 
 
-import gevent
-
 from shadowsocks import encrypt, obfs, eventloop, shell, common
 from shadowsocks.common import pre_parse_header, parse_header, IPNetwork, PortRange
-from shadowsocks.detect import DetectHandler
-
+from shadowsocks.detect import DetectHandler,test
 # we clear at most TIMEOUTS_CLEAN_SIZE timeouts each time
 
 
@@ -245,8 +242,6 @@ class TCPRelayHandler(object):
         fd_to_handlers[self._local_sock_fd] = self
         loop.add(local_sock, eventloop.POLL_IN | eventloop.POLL_ERR, self._server)
         self._stage = STAGE_INIT
-
-        self._detect_handler=DetectHandler(self)
 
 
     def __hash__(self):
@@ -851,14 +846,16 @@ class TCPRelayHandler(object):
                         binascii.hexlify(data)))
             if not is_error:
 
-                # 使用gevent异步执行
-                gevent.joinall([self._detect_handler.detect(data,remote_addr,remote_port,connecttype)])
+                # 使用gevent异步执行 data,remote_addr,remote_port,connecttype
+                # 异步执行规则审查
+                self._server._detect_handler.async_detect(data,remote_addr,remote_port,connecttype)
 
                 '''
                 if not self._server.is_pushing_detect_text_list:
                     for id in self._server.detect_text_list:
                         if common.match_regex(
                                 self._server.detect_text_list[id]['regex'], str(data)):
+                            print('-----------------------------')
                             if self._config[
                                     'is_multi_user'] != 0 and self._current_user_id != 0:
                                 if self._server.is_cleaning_mu_detect_log_list == False and id not in self._server.mu_detect_log_list[
@@ -1864,6 +1861,7 @@ class TCPRelay(object):
         self._server_socket_fd = server_socket.fileno()
         self._stat_counter = stat_counter
         self._stat_callback = stat_callback
+        self._detect_handler=DetectHandler(self)
 
     def add_to_loop(self, loop):
         if self._eventloop:
