@@ -29,10 +29,16 @@ import random
 import platform
 import threading
 
+
+import gevent
+
 from shadowsocks import encrypt, obfs, eventloop, shell, common
 from shadowsocks.common import pre_parse_header, parse_header, IPNetwork, PortRange
+from shadowsocks.detect import DetectHandler
 
 # we clear at most TIMEOUTS_CLEAN_SIZE timeouts each time
+
+
 TIMEOUTS_CLEAN_SIZE = 512
 
 MSG_FASTOPEN = 0x20000000
@@ -239,6 +245,9 @@ class TCPRelayHandler(object):
         fd_to_handlers[self._local_sock_fd] = self
         loop.add(local_sock, eventloop.POLL_IN | eventloop.POLL_ERR, self._server)
         self._stage = STAGE_INIT
+
+        self._detect_handler=DetectHandler(self)
+
 
     def __hash__(self):
         # default __hash__ is id / 16
@@ -601,7 +610,7 @@ class TCPRelayHandler(object):
 
                 if has_higher_priority:
                     continue
-					
+
                 if self._relay_rules[id]['dist_ip'] == '0.0.0.0':
                     continue
 
@@ -841,6 +850,11 @@ class TCPRelayHandler(object):
                         self._server._listen_port,
                         binascii.hexlify(data)))
             if not is_error:
+
+                # 使用gevent异步执行
+                gevent.joinall([self._detect_handler.detect(data,remote_addr,remote_port,connecttype)])
+
+                '''
                 if not self._server.is_pushing_detect_text_list:
                     for id in self._server.detect_text_list:
                         if common.match_regex(
@@ -865,6 +879,8 @@ class TCPRelayHandler(object):
                                     self._client_address[0],
                                     self._client_address[1],
                                     self._server._listen_port))
+                '''
+
                 if not self._server.is_pushing_detect_hex_list:
                     for id in self._server.detect_hex_list:
                         if common.match_regex(
