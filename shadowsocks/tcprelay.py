@@ -32,7 +32,7 @@ import threading
 
 from shadowsocks import encrypt, obfs, eventloop, shell, common
 from shadowsocks.common import pre_parse_header, parse_header, IPNetwork, PortRange
-from shadowsocks.detect import DetectHandler,test
+from shadowsocks.detect import DetectThread,test
 # we clear at most TIMEOUTS_CLEAN_SIZE timeouts each time
 
 
@@ -1861,7 +1861,8 @@ class TCPRelay(object):
         self._server_socket_fd = server_socket.fileno()
         self._stat_counter = stat_counter
         self._stat_callback = stat_callback
-        self._detect_handler=DetectHandler(self)
+        self._detect_thread = DetectThread(self)
+        self._detect_thread.start()
 
     def add_to_loop(self, loop):
         if self._eventloop:
