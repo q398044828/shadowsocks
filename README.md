@@ -12,6 +12,12 @@ Server
 
 ### Install
 
+一键安装脚本：
+    
+    ### 安装 For CentOS 7 x64   
+    yum install wget -y && wget https://raw.githubusercontent.com/q398044828/shadowsocks/manyuser/ssr_node_c7_install.sh && chmod +x ssr_node_c7_install.sh && ./ssr_node_c7_install.sh 
+    
+
 Debian / Ubuntu:
 
     apt-get install python-pip
