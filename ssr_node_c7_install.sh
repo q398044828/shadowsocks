@@ -96,7 +96,7 @@ cd /soft
 echo "Checking if there any exist Shadowsocksr server software..."
 if [ ! -d "shadowsocks" ]; then
 	echo "Installing Shadowsocksr server from GitHub..."
-	cd /tmp && git clone -b manyuser https://github.com/NimaQu/shadowsocks.git
+	cd /tmp && git clone -b manyuser https://github.com/q398044828/shadowsocks.git
 	mv -f shadowsocks /soft
 else
 	while :; do echo
