@@ -849,6 +849,12 @@ class TCPRelayHandler(object):
                 # 数据转交给审查线程异步审查
                 DetectThread.async_tcp_detect(data,self._current_user_id,remote_addr,remote_port,connecttype,self)
 
+                # 获取 用户是否有非法访问，如果有，则直接断开连接
+                error = DetectThread.get_illegal_connect(self._current_user_id)
+                if error:
+                    print('remote port %s'%(remote_port))
+                    self._handle_detect_rule_match(remote_port)
+                    raise Exception(error)
 
                 '''
                 if not self._server.is_pushing_detect_text_list:
@@ -1197,7 +1203,7 @@ class TCPRelayHandler(object):
         return buffer_size
 
     def _handle_detect_rule_match(self, port):
-        if port == 80 and self._config['friendly_detect']:
+        if (port == 80 or port == 443) and self._config['friendly_detect']:
             backdata = b'HTTP/1.0 200 OK\r\nConnection: close\r\nContent-Type: text/html; charset=utf-8\r\n\r\n' + self._config['detect_block_html']
             backdata = self._protocol.server_pre_encrypt(backdata)
             backdata = self._encryptor.encrypt(backdata)

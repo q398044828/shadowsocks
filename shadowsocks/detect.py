@@ -18,22 +18,50 @@ from flashtext.keyword import KeywordProcessor
 
 class DetectThread(threading.Thread):
     # ----------- config --------------------
-    detect_interval = 60  # 审查间隔  单位s
+    detect_interval = 0  # 审查间隔  单位s  60合适
+    detect_rule_update_interval = 600  # 审查规则更新时间  单位s 最合适的是600
+
+    detect_stop_interval = 60  # 触发了审计规则后，中断连接的时长 单位s
+
     # ----------- code ---------------------
     dataQueue = None
     timer = {}  # key放用户id,value放上次审查的时间
-    keywork_update_timer = time.time()
-    detect_text_list=None
-    keyword_processor = KeywordProcessor()
+    errors = {}  # key 用户id_用户端口,val错误信息,用户id_用户端口_time,val为连接时间
+    keywork_update_timer = None
+    detect_text_list = None
+    detect_regex_list = None
+    keyword_processor = None
 
     def __init__(self):
         threading.Thread.__init__(self)
         DetectThread.dataQueue = Queue.Queue()
         DetectThread.detect_interval = self.detect_interval
-        DetectThread.keywork_update_timer = time.time()
         logging.info(".......... detect thread init ...")
 
-    # 每分钟/秒抽查每个用户的数据1次，减少cpu消耗，审计规则7000条正则，太消耗cpu了
+    def run(self):
+        logging.debug('--------------- detect thread run---')
+        while True:
+
+            try:
+
+                # 数据审查
+                # class DetectData
+                data = DetectThread.dataQueue.get()
+
+                # 审查规则更新
+                DetectThread.keyword_update_judge()
+
+                # 兼容原来的正则审计规则
+                # self.regex_detect(data)
+
+                # 新增直接搜索字符串匹配规则
+                self.flashtext_detect(data)
+
+            except Exception as e:
+                traceback.print_exc(e)
+                pass
+
+    # 根据配置时间抽查每个用户的数据1次，减少cpu消耗，审计规则7000条正则，太消耗cpu了
     @staticmethod
     def detect_judge(uid):
         try:
@@ -53,12 +81,13 @@ class DetectThread(threading.Thread):
             traceback.print_exc()
             pass
 
-    # 定时更新审查规则判断
+    # 更新审查规则判断
     @staticmethod
     def detect_keyword_judge():
         try:
             now = time.time()
-            if (now - DetectThread.keywork_update_timer) > DetectThread.detect_interval:
+            if (DetectThread.keywork_update_timer is None) or (
+                    (now - DetectThread.keywork_update_timer) > DetectThread.detect_rule_update_interval):
                 DetectThread.keywork_update_timer = now
                 return True
             else:
@@ -68,55 +97,88 @@ class DetectThread(threading.Thread):
             pass
 
     #  异步审计
-    #  将数据构造成类 添加到队列，新开线程处理
+    #  将数据构造成类 添加到队列，用线程处理
     @staticmethod
     def async_tcp_detect(data, uid, remote_addr, remote_port, connect_type, tcprelay):
         if DetectThread.detect_judge(uid):
-            logging.info('-------------detect add tcp data ')
-            DetectThread.dataQueue.put(DetectData().tcp(data, remote_addr, remote_port, connect_type, tcprelay))
+
             if DetectThread.detect_keyword_judge():
-                DetectThread.detect_text_list_update(tcprelay.detect_text_list)
+                DetectThread.detect_text_list_update(tcprelay._server.detect_text_list)
+            DetectThread.dataQueue.put(DetectData().tcp(data, uid, remote_addr, remote_port, connect_type, tcprelay))
 
     @staticmethod
     def async_udp_detect(data, uid, server_addr, server_port, r_addr, udprelay):
         if DetectThread.detect_judge(uid):
-            logging.info('------------- detect add udp data ')
-            DetectThread.dataQueue.put(DetectData().udp(data, uid, server_addr, server_port, r_addr, udprelay))
+
             if DetectThread.detect_keyword_judge():
-                DetectThread.detect_text_list_update(udprelay.detect_text_list)
+                DetectThread.detect_text_list_update(udprelay._server.detect_text_list)
 
-    def run(self):
-        logging.debug('--------------- keywork_rule loop update ')
-        threading.Thread(target=self.keyword_rule())
-
-        logging.debug('--------------- detect thread run---')
-        while True:
-            # class DetectData
-            data = DetectThread.dataQueue.get()
-            self.detect(data)
+            logging.debug('------------- detect add udp data ')
+            DetectThread.dataQueue.put(DetectData().udp(data, uid, server_addr, server_port, r_addr, udprelay))
 
     @staticmethod
     def detect_text_list_update(detect_text_list):
-        DetectThread.detect_text_list=detect_text_list
+        DetectThread.detect_text_list = detect_text_list
+
+    # 判断是否需要根据detect_text_list
+    @staticmethod
+    def keyword_update_judge():
+        if DetectThread.detect_text_list:
+            DetectThread.detect_rule_update(DetectThread.detect_text_list)
+            DetectThread.detect_text_list = None
 
     # flashtext规则生成
     @staticmethod
-    def keyword_update(detect_text_list):
-        keyworkProcessor=KeywordProcessor()
+    def detect_rule_update(detect_list):
+        logging.info('------------- flashtext keyword updating--------------')
+        kp = KeywordProcessor()
+        DetectThread.detect_regex_list = {}
+        for id in detect_list:
+            str = detect_list[id]['regex']
+            if str.startswith('match_'):
+                str = str.replace('match_', '')
+                kp.add_keyword(str)
+            else:
+                DetectThread.detect_regex_list[id] = detect_list[id]
 
-        for id in detect_text_list:
-            keyworkProcessor.add_keyword(detect_text_list[id]['regex'])
+        DetectThread.keyword_processor = kp
+        logging.debug('------------- flashtext keyword res %s --------------' % (kp.get_all_keywords()))
 
-        DetectThread.keyword_processor=keyworkProcessor
-
-
-    def detect(self, detectData):
+    def flashtext_detect(self, detectData):
         if 'tcp' == detectData._type:
-            self.tcp_detect(detectData)
+            self.flashtext_tcp_detect(detectData)
         else:
-            self.udp_detect(detectData)
+            self.flashtext_udp_detect(detectData)
 
-    def udp_detect(self, detectData):
+    def flashtext_tcp_detect(self, detectData):
+
+        dddd = str(detectData._data)
+        searchRes = DetectThread.keyword_processor.extract_keywords(dddd)
+
+        logging.info('-------- keyword all: \r\n %s \r\n'
+                     '-------- detect data: \r\n %s \r\n '
+                     '-------- detect res: \r\n %s \r\n '
+                     '-------- testtest: %s ',
+                     DetectThread.keyword_processor.get_all_keywords(),
+                     dddd,
+                     searchRes,
+                     dddd.find('google.com'))
+        if searchRes:
+            self.detect_tcp_res_handle(detectData)
+
+    def flashtext_udp_detect(self, detectData):
+        data = str(detectData._data)
+        searchRes = DetectThread.keyword_processor.extract_keywords(data)
+        if searchRes:
+            logging.info('-------- connection reject: %s ' % (searchRes))
+
+    def regex_detect(self, detectData):
+        if 'tcp' == detectData._type:
+            self.regex_tcp_detect(detectData)
+        else:
+            self.regex_udp_detect(detectData)
+
+    def regex_udp_detect(self, detectData):
 
         data = detectData._data
         relay = detectData._relay
@@ -147,7 +209,7 @@ class DetectThread(threading.Thread):
                          r_addr[1],
                          relay._listen_port))
 
-    def tcp_detect(self, detectData):
+    def regex_tcp_detect(self, detectData):
 
         data = detectData._data
         relay = detectData._relay
@@ -185,13 +247,65 @@ class DetectThread(threading.Thread):
                              relay._client_address[1],
                              relay._server._listen_port))
 
+    def detect_tcp_res_handle(self, detectData):
+        relay = detectData._relay
+        remote_addr = detectData._remote_addr
+        remote_port = detectData._remote_port
+        connect_type = detectData._connect_type
+
+        id = 0  # 固有gfwlist规则id
+
+        if relay._config['is_multi_user'] != 0 \
+                and relay._current_user_id != 0:
+            if relay._server.is_cleaning_mu_detect_log_list == False \
+                    and id not in relay._server.mu_detect_log_list[
+                relay._current_user_id]:
+                relay._server.mu_detect_log_list[
+                    relay._current_user_id].append(id)
+        else:
+            if relay._server.is_cleaning_detect_log == False and id not in relay._server.detect_log_list:
+                relay._server.detect_log_list.append(id)
+
+        # relay._handle_detect_rule_match(remote_port)
+
+        error = (
+                'This connection match the regex: id:%d was reject,regex: %s ,%s connecting %s:%d from %s:%d via port %d' %
+                (relay._server.detect_text_list[id]['id'],
+                 relay._server.detect_text_list[id]['regex'],
+                 (connect_type == 0) and 'TCP' or 'UDP',
+                 common.to_str(remote_addr),
+                 remote_port,
+                 relay._client_address[0],
+                 relay._client_address[1],
+                 relay._server._listen_port))
+
+        # 记录时间和错误
+        DetectThread.errors[detectData._uid] = error
+        DetectThread.errors["%s_time" % (detectData._uid)] = time.time()
+
+        logging.error(error)
+
+        relay.destroy()
+
+    @staticmethod
+    def get_illegal_connect(uid, port=None):
+        if DetectThread.errors.has_key(uid):
+            error = DetectThread.errors.get(uid)
+            errorTime = DetectThread.errors.get("%s_time" % (uid))
+            now = time.time()
+            if (now - errorTime) > DetectThread.detect_stop_interval:
+                return DetectThread.errors.pop(uid)
+            else:
+                return error
+
 
 class DetectData(object):
     def __init__(self):
         object.__init__(self)
 
-    def tcp(self, data, remote_addr, remote_port, connect_type, tcprelay):
+    def tcp(self, data, uid, remote_addr, remote_port, connect_type, tcprelay):
         self._data = data
+        self._uid = uid
         self._relay = tcprelay
         self._remote_addr = remote_addr
         self._remote_port = remote_port
