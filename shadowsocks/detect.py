@@ -38,7 +38,7 @@ class DetectThread(threading.Thread):
         logging.info(".......... detect thread init ...")
 
     def run(self):
-        logging.debug('--------------- detect thread run---')
+        logging.info('--------------- detect thread run---')
         while True:
 
             try:
@@ -103,6 +103,8 @@ class DetectThread(threading.Thread):
 
             if DetectThread.detect_keyword_judge():
                 DetectThread.detect_text_list_update(tcprelay._server.detect_text_list)
+
+            logging.debug('------------- detect add tcp data ')
             DetectThread.dataQueue.put(DetectData().tcp(data, uid, remote_addr, remote_port, connect_type, tcprelay))
 
     @staticmethod
@@ -141,6 +143,7 @@ class DetectThread(threading.Thread):
                 DetectThread.detect_regex_list[id] = detect_list[id]
 
         DetectThread.keyword_processor = kp
+
         logging.debug('------------- flashtext keyword res %s --------------' % (kp.get_all_keywords()))
 
     def gfwmatch_detect(self, detectData):
@@ -155,7 +158,7 @@ class DetectThread(threading.Thread):
 
         searchRes = DetectThread.keyword_processor.extract_keywords(dddd)
 
-        logging.info('-------- detect data: \r\n %s \r\n '
+        logging.debug('-------- detect data: \r\n %s \r\n '
                      '-------- detect res: \r\n %s \r\n ',
                      dddd,
                      searchRes)
@@ -215,7 +218,7 @@ class DetectThread(threading.Thread):
         remote_port = detectData._remote_port
         connect_type = detectData._connect_type
 
-        logging.info('--------------- detect thread handle tcp data: %s ---',data)
+        logging.debug('--------------- detect thread handle tcp data: %s ---',data)
 
         if not relay._server.is_pushing_detect_text_list:
             for id in DetectThread.detect_regex_list:
