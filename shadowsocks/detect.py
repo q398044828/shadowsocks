@@ -13,6 +13,7 @@ import threading
 import Queue
 import time
 import traceback
+from flashtext.keyword import KeywordProcessor
 
 
 class DetectThread(threading.Thread):
@@ -21,12 +22,15 @@ class DetectThread(threading.Thread):
     # ----------- code ---------------------
     dataQueue = None
     timer = {}  # key放用户id,value放上次审查的时间
+    keywork_update_timer = time.time()
+    detect_text_list=None
+    keyword_processor = KeywordProcessor()
 
     def __init__(self):
         threading.Thread.__init__(self)
         DetectThread.dataQueue = Queue.Queue()
         DetectThread.detect_interval = self.detect_interval
-
+        DetectThread.keywork_update_timer = time.time()
         logging.info(".......... detect thread init ...")
 
     # 每分钟/秒抽查每个用户的数据1次，减少cpu消耗，审计规则7000条正则，太消耗cpu了
@@ -49,26 +53,62 @@ class DetectThread(threading.Thread):
             traceback.print_exc()
             pass
 
+    # 定时更新审查规则判断
+    @staticmethod
+    def detect_keyword_judge():
+        try:
+            now = time.time()
+            if (now - DetectThread.keywork_update_timer) > DetectThread.detect_interval:
+                DetectThread.keywork_update_timer = now
+                return True
+            else:
+                return False
+        except Exception as e:
+            traceback.print_exc()
+            pass
+
     #  异步审计
     #  将数据构造成类 添加到队列，新开线程处理
     @staticmethod
-    def async_tcp_detect(data, uid, remote_addr, remote_port, connect_type, relay):
+    def async_tcp_detect(data, uid, remote_addr, remote_port, connect_type, tcprelay):
         if DetectThread.detect_judge(uid):
             logging.info('-------------detect add tcp data ')
-            DetectThread.dataQueue.put(DetectData().tcp(data, remote_addr, remote_port, connect_type, relay))
+            DetectThread.dataQueue.put(DetectData().tcp(data, remote_addr, remote_port, connect_type, tcprelay))
+            if DetectThread.detect_keyword_judge():
+                DetectThread.detect_text_list_update(tcprelay.detect_text_list)
 
     @staticmethod
     def async_udp_detect(data, uid, server_addr, server_port, r_addr, udprelay):
         if DetectThread.detect_judge(uid):
             logging.info('------------- detect add udp data ')
             DetectThread.dataQueue.put(DetectData().udp(data, uid, server_addr, server_port, r_addr, udprelay))
+            if DetectThread.detect_keyword_judge():
+                DetectThread.detect_text_list_update(udprelay.detect_text_list)
 
     def run(self):
+        logging.debug('--------------- keywork_rule loop update ')
+        threading.Thread(target=self.keyword_rule())
+
         logging.debug('--------------- detect thread run---')
         while True:
             # class DetectData
             data = DetectThread.dataQueue.get()
             self.detect(data)
+
+    @staticmethod
+    def detect_text_list_update(detect_text_list):
+        DetectThread.detect_text_list=detect_text_list
+
+    # flashtext规则生成
+    @staticmethod
+    def keyword_update(detect_text_list):
+        keyworkProcessor=KeywordProcessor()
+
+        for id in detect_text_list:
+            keyworkProcessor.add_keyword(detect_text_list[id]['regex'])
+
+        DetectThread.keyword_processor=keyworkProcessor
+
 
     def detect(self, detectData):
         if 'tcp' == detectData._type:
@@ -77,6 +117,7 @@ class DetectThread(threading.Thread):
             self.udp_detect(detectData)
 
     def udp_detect(self, detectData):
+
         data = detectData._data
         relay = detectData._relay
         uid = detectData._uid
