@@ -37,7 +37,7 @@ import auto_thread
 import auto_block
 from shadowsocks import shell
 from configloader import load_config, get_config
-
+from shadowsocks.detect import DetectThread
 
 class MainThread(threading.Thread):
 
@@ -63,6 +63,15 @@ def main():
     else:
         threadMain = MainThread(db_transfer.DbTransfer)
     threadMain.start()
+
+    # 审计规则线程
+
+    try:
+        threadDetect=DetectThread()
+        threadDetect.start()
+    except Exception as e:
+        logging.error('myError->:　detect thread start error　%s' %
+                      (e))
 
     threadSpeedtest = MainThread(speedtest_thread.Speedtest)
     threadSpeedtest.start()

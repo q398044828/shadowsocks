@@ -848,7 +848,11 @@ class TCPRelayHandler(object):
 
                 # 使用gevent异步执行 data,remote_addr,remote_port,connecttype
                 # 异步执行规则审查
-                self._server._detect_handler.async_detect(data,remote_addr,remote_port,connecttype)
+                # self._server._detect_thread.async_detect(data,remote_addr,remote_port,connecttype)
+
+
+                DetectThread.async_detect(data,remote_addr,remote_port,connecttype,self)
+
 
                 '''
                 if not self._server.is_pushing_detect_text_list:
@@ -876,6 +880,7 @@ class TCPRelayHandler(object):
                                     self._client_address[0],
                                     self._client_address[1],
                                     self._server._listen_port))
+                           
                 '''
 
                 if not self._server.is_pushing_detect_hex_list:
@@ -1861,8 +1866,6 @@ class TCPRelay(object):
         self._server_socket_fd = server_socket.fileno()
         self._stat_counter = stat_counter
         self._stat_callback = stat_callback
-        self._detect_thread = DetectThread(self)
-        self._detect_thread.start()
 
     def add_to_loop(self, loop):
         if self._eventloop:
