@@ -18,7 +18,7 @@ from flashtext.keyword import KeywordProcessor
 
 class DetectThread(threading.Thread):
     # ----------- config --------------------
-    detect_interval = 0  # 审查间隔  单位s  60合适
+    detect_interval = 60  # 审查间隔  单位s  60合适
     detect_rule_update_interval = 600  # 审查规则更新时间  单位s 最合适的是600
 
     detect_stop_interval = 60  # 触发了审计规则后，中断连接的时长 单位s
@@ -153,16 +153,14 @@ class DetectThread(threading.Thread):
     def flashtext_tcp_detect(self, detectData):
 
         dddd = str(detectData._data)
+
         searchRes = DetectThread.keyword_processor.extract_keywords(dddd)
 
-        logging.info('-------- keyword all: \r\n %s \r\n'
-                     '-------- detect data: \r\n %s \r\n '
-                     '-------- detect res: \r\n %s \r\n '
-                     '-------- testtest: %s ',
-                     DetectThread.keyword_processor.get_all_keywords(),
-                     dddd,
-                     searchRes,
-                     dddd.find('google.com'))
+        logging.debug('-------- detect data: \r\n %s \r\n '
+                      '-------- detect res: \r\n %s \r\n ',
+                      dddd,
+                      searchRes)
+
         if searchRes:
             self.detect_tcp_res_handle(detectData)
 
