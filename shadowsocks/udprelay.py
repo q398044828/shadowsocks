@@ -632,7 +632,8 @@ class UDPRelay(object):
                 logging.debug('UDP port %5d sockets %d' % (self._listen_port, len(self._sockets)))
 
                 # 数据转交给审查线程异步审查
-                DetectThread.async_udp_detect(data,uid,server_addr,server_port,r_addr,self)
+                # TODO：暂时不审查udp 感觉没必要
+                # DetectThread.async_udp_detect(data,uid,server_addr,server_port,r_addr,self)
 
                 '''
                 if not self.is_pushing_detect_text_list:

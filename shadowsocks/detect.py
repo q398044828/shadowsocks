@@ -20,7 +20,6 @@ class DetectThread(threading.Thread):
     # ----------- config --------------------
     detect_interval = 60  # 审查间隔  单位s  60合适
     detect_rule_update_interval = 600  # 审查规则更新时间  单位s 最合适的是600
-
     detect_stop_interval = 60  # 触发了审计规则后，中断连接的时长 单位s
 
     # ----------- code ---------------------
@@ -52,10 +51,10 @@ class DetectThread(threading.Thread):
                 DetectThread.keyword_update_judge()
 
                 # 兼容原来的正则审计规则
-                # self.regex_detect(data)
+                self.regex_detect(data)
 
                 # 新增直接搜索字符串匹配规则
-                self.flashtext_detect(data)
+                self.gfwmatch_detect(data)
 
             except Exception as e:
                 traceback.print_exc(e)
@@ -135,8 +134,8 @@ class DetectThread(threading.Thread):
         DetectThread.detect_regex_list = {}
         for id in detect_list:
             str = detect_list[id]['regex']
-            if str.startswith('match_'):
-                str = str.replace('match_', '')
+            if str.startswith('gfwmatch_'):
+                str = str.replace('gfwmatch_', '')
                 kp.add_keyword(str)
             else:
                 DetectThread.detect_regex_list[id] = detect_list[id]
@@ -144,27 +143,28 @@ class DetectThread(threading.Thread):
         DetectThread.keyword_processor = kp
         logging.debug('------------- flashtext keyword res %s --------------' % (kp.get_all_keywords()))
 
-    def flashtext_detect(self, detectData):
+    def gfwmatch_detect(self, detectData):
         if 'tcp' == detectData._type:
-            self.flashtext_tcp_detect(detectData)
+            self.gfwmatch_tcp_detect(detectData)
         else:
-            self.flashtext_udp_detect(detectData)
+            self.gfwmatch_udp_detect(detectData)
 
-    def flashtext_tcp_detect(self, detectData):
+    def gfwmatch_tcp_detect(self, detectData):
 
         dddd = str(detectData._data)
 
         searchRes = DetectThread.keyword_processor.extract_keywords(dddd)
 
-        logging.debug('-------- detect data: \r\n %s \r\n '
-                      '-------- detect res: \r\n %s \r\n ',
-                      dddd,
-                      searchRes)
+        logging.info('-------- detect data: \r\n %s \r\n '
+                     '-------- detect res: \r\n %s \r\n ',
+                     dddd,
+                     searchRes)
 
         if searchRes:
-            self.detect_tcp_res_handle(detectData)
+            # detectId=0 固有gfwlist规则id
+            self.detect_tcp_res_handle(detectData, detectId=0)
 
-    def flashtext_udp_detect(self, detectData):
+    def gfwmatch_udp_detect(self, detectData):
         data = str(detectData._data)
         searchRes = DetectThread.keyword_processor.extract_keywords(data)
         if searchRes:
@@ -209,49 +209,31 @@ class DetectThread(threading.Thread):
 
     def regex_tcp_detect(self, detectData):
 
-        data = detectData._data
+        data = str(detectData._data)
         relay = detectData._relay
         remote_addr = detectData._remote_addr
         remote_port = detectData._remote_port
         connect_type = detectData._connect_type
 
-        logging.debug('--------------- detect thread handle tcp data ---')
+        logging.info('--------------- detect thread handle tcp data: %s ---',data)
 
         if not relay._server.is_pushing_detect_text_list:
-            for id in relay._server.detect_text_list:
+            for id in DetectThread.detect_regex_list:
                 # pass
                 if common.match_regex(
-                        relay._server.detect_text_list[id]['regex'], str(data)):
-                    if relay._config['is_multi_user'] != 0 \
-                            and relay._current_user_id != 0:
-                        if relay._server.is_cleaning_mu_detect_log_list == False \
-                                and id not in relay._server.mu_detect_log_list[
-                            relay._current_user_id]:
-                            relay._server.mu_detect_log_list[
-                                relay._current_user_id].append(id)
-                    else:
-                        if relay._server.is_cleaning_detect_log == False and id not in relay._server.detect_log_list:
-                            relay._server.detect_log_list.append(id)
-                    relay._handle_detect_rule_match(remote_port)
+                        DetectThread.detect_regex_list[id]['regex'], data):
 
-                    print (
-                            'This connection match the regex: id:%d was reject,regex: %s ,%s connecting %s:%d from %s:%d via port %d' %
-                            (relay._server.detect_text_list[id]['id'],
-                             relay._server.detect_text_list[id]['regex'],
-                             (connect_type == 0) and 'TCP' or 'UDP',
-                             common.to_str(remote_addr),
-                             remote_port,
-                             relay._client_address[0],
-                             relay._client_address[1],
-                             relay._server._listen_port))
+                    logging.info("----regex detect: %s",DetectThread.detect_regex_list[id]['regex'])
 
-    def detect_tcp_res_handle(self, detectData):
+                    self.detect_tcp_res_handle(detectData, id)
+
+    def detect_tcp_res_handle(self, detectData, detectId):
         relay = detectData._relay
         remote_addr = detectData._remote_addr
         remote_port = detectData._remote_port
         connect_type = detectData._connect_type
 
-        id = 0  # 固有gfwlist规则id
+        id = detectId
 
         if relay._config['is_multi_user'] != 0 \
                 and relay._current_user_id != 0:
@@ -280,9 +262,7 @@ class DetectThread(threading.Thread):
         # 记录时间和错误
         DetectThread.errors[detectData._uid] = error
         DetectThread.errors["%s_time" % (detectData._uid)] = time.time()
-
         logging.error(error)
-
         relay.destroy()
 
     @staticmethod
