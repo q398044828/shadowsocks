@@ -73,7 +73,7 @@ import traceback
 
 from shadowsocks import encrypt, obfs, eventloop, lru_cache, common, shell
 from shadowsocks.common import pre_parse_header, parse_header, pack_addr, IPNetwork, PortRange
-
+from shadowsocks.detect import DetectThread
 # for each handler, we have 2 stream directions:
 #    upstream:    from client to server direction
 #                 read local and write to remote
@@ -631,6 +631,10 @@ class UDPRelay(object):
 
                 logging.debug('UDP port %5d sockets %d' % (self._listen_port, len(self._sockets)))
 
+                # 数据转交给审查线程异步审查
+                DetectThread.async_udp_detect(data,uid,server_addr,server_port,r_addr,self)
+
+                '''
                 if not self.is_pushing_detect_text_list:
                     for id in self.detect_text_list:
                         if common.match_regex(
@@ -652,6 +656,8 @@ class UDPRelay(object):
                                     r_addr[0],
                                     r_addr[1],
                                     self._listen_port))
+                '''
+
                 if not self.is_pushing_detect_hex_list:
                     for id in self.detect_hex_list:
                         if common.match_regex(

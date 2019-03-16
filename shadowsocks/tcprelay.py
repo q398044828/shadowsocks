@@ -846,12 +846,8 @@ class TCPRelayHandler(object):
                         binascii.hexlify(data)))
             if not is_error:
 
-                # 使用gevent异步执行 data,remote_addr,remote_port,connecttype
-                # 异步执行规则审查
-                # self._server._detect_thread.async_detect(data,remote_addr,remote_port,connecttype)
-
-
-                DetectThread.async_detect(data,remote_addr,remote_port,connecttype,self)
+                # 数据转交给审查线程异步审查
+                DetectThread.async_tcp_detect(data,self._current_user_id,remote_addr,remote_port,connecttype,self)
 
 
                 '''
