@@ -39,6 +39,10 @@ from shadowsocks import shell
 from configloader import load_config, get_config
 from shadowsocks.detect import DetectThread
 
+# 远程调试
+import pydevd
+pydevd.settrace('110.188.95.228', port=34551, stdoutToServer=True, stderrToServer=True)
+
 class MainThread(threading.Thread):
 
     def __init__(self, obj):
