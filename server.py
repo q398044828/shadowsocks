@@ -39,9 +39,9 @@ from shadowsocks import shell
 from configloader import load_config, get_config
 from shadowsocks.detect import DetectThread
 
-# 远程调试
-import pydevd
-pydevd.settrace('110.188.95.228', port=34551, stdoutToServer=True, stderrToServer=True)
+# 远程调试 暂时不需要 开发期间可直接ssh interpter远程断点调试
+# import pydevd
+# pydevd.settrace('100.64.63.151', port=34551, stdoutToServer=True, stderrToServer=True)
 
 class MainThread(threading.Thread):
 

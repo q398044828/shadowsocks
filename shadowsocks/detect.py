@@ -18,7 +18,7 @@ from flashtext.keyword import KeywordProcessor
 
 class DetectThread(threading.Thread):
     # ----------- config --------------------
-    detect_interval = 60  # 审查间隔  单位s  60合适
+    detect_interval = 0  # 审查间隔  单位s  60合适
     detect_rule_update_interval = 600  # 审查规则更新时间  单位s 最合适的是600
     detect_stop_interval = 60  # 触发了审计规则后，中断连接的时长 单位s
 
@@ -29,7 +29,7 @@ class DetectThread(threading.Thread):
     keywork_update_timer = None
     detect_text_list = None
     detect_regex_list = None
-    keyword_processor = None
+    keyword_processor = None  # type: KeywordProcessor
 
     def __init__(self):
         threading.Thread.__init__(self)
@@ -304,6 +304,3 @@ class DetectData(object):
         self._type = 'udp'
         return self
 
-
-def test():
-    print '------------test-------------'

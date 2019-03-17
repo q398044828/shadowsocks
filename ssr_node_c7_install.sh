@@ -115,7 +115,11 @@ else
 fi
 cd /soft/shadowsocks
 pip install --upgrade pip setuptools
+
+# win下国内开发环境使用如下命令下载组件
+# pip install -r .\requirements.txt -i http://pypi.douban.com/simple/ --trusted-host pypi.douban.com
 pip install -r requirements.txt
+
 echo "Generating config file..."
 cp apiconfig.py userapiconfig.py
 cp config.json user-config.json
